@@ -1,0 +1,9 @@
+{
+  "name": "Gestion de l’institut",
+  "short_name": "Gestion",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#faf6f4",
+  "theme_color": "#b07a8a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gestion de l’institut</title>
+  <meta name="theme-color" content="#b07a8a">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h1 id="login-titre">Gestion de l’institut</h1>
+      <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>
+      <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
+      <p id="login-erreur" class="form-error" hidden></p>
+      <button class="btn primary" type="submit">Se connecter</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <header class="topbar no-print">
+      <div class="brand" id="brand"></div>
+      <nav id="nav" class="nav">
+        <a href="#/tableau-de-bord" data-page="tableau-de-bord"><span class="ico">▦</span><span>Tableau de bord</span></a>
+        <a href="#/entrees" data-page="entrees"><span class="ico">＋</span><span>Entrées</span></a>
+        <a href="#/sorties" data-page="sorties"><span class="ico">－</span><span>Sorties</span></a>
+        <a href="#/stock" data-page="stock"><span class="ico">☰</span><span>Stock</span></a>
+      </nav>
+      <button class="btn small" id="logout">Déconnexion</button>
+    </header>
+    <main id="main"></main>
+  </div>
+
+  <dialog id="modal"></dialog>
+  <div id="toast" role="status"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
