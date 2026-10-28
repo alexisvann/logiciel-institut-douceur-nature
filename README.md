@@ -22,6 +22,7 @@ Petit logiciel de suivi pour un institut de beauté : entrées et sorties d'arge
 
 ## Notes
 
+- **Mise à jour de la base** : quand `schema.sql` évolue (ex. nouvelle vue pour le Récap), on le recolle en entier dans le SQL Editor et on clique *Run*. Il est conçu pour être relancé sans toucher aux données.
 - **Pause Supabase** : le plan gratuit met un projet en pause après 7 jours sans activité. `.github/workflows/ping.yml` fait un appel deux fois par semaine pour l'éviter. GitHub désactive pourtant les workflows planifiés après 60 jours sans aucune activité sur le dépôt : utiliser l'app régulièrement suffit aussi, et on peut relancer le workflow à la main (onglet *Actions*).
 - **Sauvegarde** : pas de sauvegarde automatique sur le plan gratuit. Le bouton « Sauvegarde complète » (tableau de bord) télécharge tout en ZIP (CSV + justificatifs). À faire de temps en temps, et à garder 10 ans pour la comptabilité.
 - **Mot de passe oublié** : à réinitialiser depuis Supabase (*Authentication > Users*).

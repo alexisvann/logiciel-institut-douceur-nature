@@ -172,6 +172,18 @@ create table if not exists pieces (
 
 create index if not exists pieces_sortie_idx on pieces (sortie_id);
 
+-- Résumé par mois pour la page Récap : encaissé réel (hors paiements par bon) et sorties payées
+create or replace view resume_mensuel with (security_invoker = true) as
+select mois, sum(encaisse) as encaisse, sum(sorties) as sorties
+from (
+  select to_char(paye_le, 'YYYY-MM') as mois, montant as encaisse, 0::numeric as sorties
+    from entrees where paye_le is not null and moyen is distinct from 'bon_cadeau'
+  union all
+  select to_char(date, 'YYYY-MM'), 0::numeric, montant
+    from sorties where statut = 'paye'
+) t
+group by mois;
+
 -- ---------------------------------------------------------------------
 --  SÉCURITÉ : seule une personne connectée accède aux données
 --  (les inscriptions sont désactivées : seul le compte créé à la main existe)

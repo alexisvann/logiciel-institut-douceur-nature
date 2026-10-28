@@ -1,11 +1,12 @@
 import {
-  db, $, $$, esc, chf, fmtDate, pad, todayISO, monthRange, state, monthBarHtml, bindMonthBar,
+  db, $, $$, esc, chf, fmtDate, fmtCourt, pad, todayISO, monthRange, state, monthBarHtml, bindMonthBar, chips,
   MOYENS, CATEGORIES_SORTIE, FREQUENCES, q, openModal, closeModal, confirmer, toast, messageErreur, refresh,
   envoyerPiece, urlsPieces, supprimerFichiers,
 } from './lib.js';
 
 const TABS = [['fixe', 'Fixes'], ['flexible', 'Flexibles'], ['stock', 'Stock']];
 const MOYENS_SORTIE = ['cash', 'carte', 'twint', 'virement'];
+const CLIP = '<svg class="pj" viewBox="0 0 24 24"><path d="M21 12.5l-8.5 8.5a5 5 0 0 1-7-7L14 5.5a3.5 3.5 0 0 1 5 5L10.5 19a2 2 0 0 1-3-3L15 8.5"/></svg>';
 
 export async function render(root, sub) {
   if (!TABS.some(([k]) => k === sub)) sub = 'fixe';
@@ -15,40 +16,34 @@ export async function render(root, sub) {
     .gte('date', from).lte('date', to).order('date', { ascending: false }).order('created_at', { ascending: false }));
 
   root.innerHTML = `
-    <div class="page-head"><h1>Sorties</h1><button class="btn primary" id="add">+ Ajouter</button></div>
-    <div class="tabs">${TABS.map(([k, l]) => `<a href="#/sorties/${k}" class="${k === sub ? 'active' : ''}">${l}</a>`).join('')}</div>
+    <div class="page-head"><h1>Sorties</h1><button class="btn primary small" id="add">+ Ajouter</button></div>
+    <div class="seg tabs">${TABS.map(([k, l]) => `<a href="#/sorties/${k}" class="${k === sub ? 'active' : ''}">${l}</a>`).join('')}</div>
     ${monthBarHtml()}
-    ${sub === 'fixe' ? `<p class="muted">Loyer, électricité, assurances… <button class="link" id="modeles">Gérer les charges fixes récurrentes</button></p>` : ''}
-    <div class="list">${rows.length ? rows.map((r) => ligne(r, sub)).join('') : '<p class="empty">Rien pour ce mois.</p>'}</div>`;
+    <div class="card" style="margin-top:.8rem">${rows.length ? rows.map((r) => ligne(r, sub)).join('') : '<p class="empty">Rien pour ce mois.</p>'}</div>
+    ${sub === 'fixe' ? '<p class="foot"><button class="link" id="modeles">Charges fixes récurrentes</button></p>' : ''}`;
 
   bindMonthBar(root);
   $('#add').onclick = () => formulaire(sub);
   if (sub === 'fixe') $('#modeles').onclick = () => gererModeles();
   $$('[data-edit]', root).forEach((b) => { b.onclick = () => formulaire(sub, rows.find((r) => r.id === b.dataset.edit)); });
-  $$('[data-del]', root).forEach((b) => { b.onclick = () => supprimer(rows.find((r) => r.id === b.dataset.del)); });
 }
 
 function ligne(r, sub) {
   const prevu = r.statut === 'prevu';
-  const meta = [fmtDate(r.date), sub === 'stock' ? CATEGORIES_SORTIE[r.categorie] : '', r.moyen ? MOYENS[r.moyen] : '']
-    .filter(Boolean).map(esc).join(' · ');
   const nb = r.pieces?.length || 0;
+  const meta = [fmtCourt(r.date), sub === 'stock' ? CATEGORIES_SORTIE[r.categorie] : '', r.moyen ? MOYENS[r.moyen] : '']
+    .filter(Boolean).map(esc).join(' · ');
   return `
-    <div class="item">
-      <div class="item-main">
-        <strong>${esc(r.libelle)}</strong>
-        <small>${meta}</small>
-        <div class="badges">
-          ${prevu ? '<span class="badge warn">Prévu</span>' : '<span class="badge ok">Payé</span>'}
-          ${nb ? `<span class="badge">📎 ${nb}</span>` : ''}
-        </div>
-      </div>
-      <div class="item-amount">${prevu ? '≈ ' : ''}${chf(r.montant)}</div>
-      <div class="item-actions">
-        <button class="btn small ${prevu ? 'primary' : ''}" data-edit="${r.id}">${prevu ? 'Valider' : 'Modifier'}</button>
-        <button class="btn small danger-o" data-del="${r.id}">Supprimer</button>
-      </div>
-    </div>`;
+    <button class="row" data-edit="${r.id}">
+      <span class="row-main">
+        <span class="row-title">${esc(r.libelle)}</span>
+        <span class="row-sub">${meta}${nb ? ` · ${CLIP}` : ''}</span>
+      </span>
+      <span class="row-end">
+        <span class="amount">${prevu ? '≈ ' : ''}${chf(r.montant)}</span>
+        ${prevu ? '<span class="tag warn">À valider</span>' : ''}
+      </span>
+    </button>`;
 }
 
 async function supprimer(r) {
@@ -72,56 +67,52 @@ async function formulaire(tab, s = null) {
   ]);
   const urls = await urlsPieces(pieces);
   const categorie = s?.categorie || (estStock ? 'stock_cabine' : tab);
-  const peutEtrePrevu = categorie === 'fixe';
   const retirees = new Set();
   const nouvelles = [];
 
-  const m = openModal(`${s ? (s.statut === 'prevu' ? 'Valider' : 'Modifier') : 'Ajouter'} – sortie`, `
+  const titre = s ? (s.statut === 'prevu' ? 'Valider la charge' : 'Modifier la sortie') : 'Nouvelle sortie';
+  const moyensListe = [['', 'Aucun'], ...MOYENS_SORTIE.map((k) => [k, MOYENS[k]])];
+
+  const m = openModal(titre, `
     <form id="f" class="form">
-      <label>Date<input type="date" name="date" required value="${s?.date || todayISO()}"></label>
-      <label>Fournisseur / description
+      <label class="field"><span>Description</span>
         <input name="libelle" required autocomplete="off" value="${esc(s?.libelle)}" placeholder="Ex. Migros – décorations">
       </label>
-      <label>Montant (CHF)
-        <input type="number" name="montant" required min="0" step="0.05" inputmode="decimal" value="${s ? Number(s.montant).toFixed(2) : ''}">
-      </label>
+      <div class="field-row">
+        <label class="field"><span>Montant (CHF)</span>
+          <input type="number" name="montant" required min="0" step="0.05" inputmode="decimal" value="${s ? Number(s.montant).toFixed(2) : ''}">
+        </label>
+        <label class="field"><span>Date</span><input type="date" name="date" required value="${s?.date || todayISO()}"></label>
+      </div>
       ${estStock ? `
-        <label>Type de stock
-          <select name="categorie">
-            <option value="stock_cabine" ${categorie === 'stock_cabine' ? 'selected' : ''}>Stock cabine (usage interne)</option>
-            <option value="stock_vente" ${categorie === 'stock_vente' ? 'selected' : ''}>Stock vente (revendu)</option>
-          </select>
-        </label>` : ''}
-      <label>Moyen de paiement (facultatif)
-        <select name="moyen">
-          <option value="">—</option>
-          ${MOYENS_SORTIE.map((k) => `<option value="${k}" ${s?.moyen === k ? 'selected' : ''}>${MOYENS[k]}</option>`).join('')}
-        </select>
-      </label>
-      ${peutEtrePrevu ? `
-        <label class="check"><input type="checkbox" name="paye" ${!s || s.statut === 'paye' ? 'checked' : ''}> Payé (décochez si c’est encore une charge prévue)</label>` : ''}
+        <div class="field"><span>Type de stock</span>
+          ${chips('categorie', [['stock_cabine', 'Cabine (usage interne)'], ['stock_vente', 'Vente (revendu)']], categorie)}
+        </div>` : ''}
 
-      <fieldset>
-        <legend>Justificatifs (ticket, facture)</legend>
+      <div class="field"><span>Justificatifs</span>
         <div id="pieces" class="pieces"></div>
         <div class="row-btns">
-          <label class="btn file">📷 Prendre une photo<input type="file" id="photo" accept="image/*" capture="environment" hidden></label>
-          <label class="btn file">📁 Choisir des fichiers<input type="file" id="fichiers" accept="image/*,application/pdf" multiple hidden></label>
+          <label class="btn file small">Prendre une photo<input type="file" id="photo" accept="image/*" capture="environment" hidden></label>
+          <label class="btn file small">Choisir un fichier<input type="file" id="fichiers" accept="image/*,application/pdf" multiple hidden></label>
         </div>
-      </fieldset>
+      </div>
 
-      ${estStock && !s ? `
-        <fieldset id="bloc-stock">
-          <legend>Ajouter au stock (facultatif)</legend>
-          <label>Produit<select name="stock_produit"></select></label>
-          <label>Quantité reçue<input type="number" name="stock_qte" min="1" step="1" value="1"></label>
-        </fieldset>` : ''}
+      <details class="more" ${s?.moyen || s?.note ? 'open' : ''}>
+        <summary>Plus d’options</summary>
+        <div class="form">
+          <div class="field"><span>Moyen de paiement</span>${chips('moyen', moyensListe, s?.moyen || '')}</div>
+          ${estStock && !s ? `
+            <div class="field-row">
+              <label class="field"><span>Ajouter au stock</span><select name="stock_produit"></select></label>
+              <label class="field"><span>Quantité reçue</span><input type="number" name="stock_qte" min="1" step="1" value="1"></label>
+            </div>` : ''}
+          <label class="field"><span>Remarque</span><textarea name="note" rows="2">${esc(s?.note)}</textarea></label>
+        </div>
+      </details>
 
-      <label>Remarque (facultatif)<textarea name="note" rows="2">${esc(s?.note)}</textarea></label>
-
-      <div class="actions">
-        <button type="button" class="btn" id="annuler">Annuler</button>
-        <button type="submit" class="btn primary">Enregistrer</button>
+      <div class="form-foot">
+        ${s ? '<button type="button" class="link danger" id="supprimer">Supprimer</button>' : '<span></span>'}
+        <button type="submit" class="btn primary">${s?.statut === 'prevu' ? 'Valider' : 'Enregistrer'}</button>
       </div>
     </form>`);
 
@@ -130,13 +121,12 @@ async function formulaire(tab, s = null) {
   function dessinerPieces() {
     const existantes = pieces.filter((p) => !retirees.has(p.id)).map((p) => {
       const url = urls[p.chemin];
-      const pdf = p.chemin.endsWith('.pdf');
-      const apercu = pdf || !url ? '<span class="pdf">PDF</span>' : `<img src="${esc(url)}" alt="Justificatif">`;
+      const apercu = p.chemin.endsWith('.pdf') || !url ? '<span class="pdf">PDF</span>' : `<img src="${esc(url)}" alt="Justificatif">`;
       return `<div class="piece"><a href="${esc(url || '#')}" target="_blank" rel="noopener">${apercu}</a><button type="button" class="icon" data-rm-old="${p.id}" aria-label="Retirer">✕</button></div>`;
     });
     const ajoutees = nouvelles.map((file, i) => `
-      <div class="piece new"><span class="pdf">${esc(file.name.slice(0, 18))}</span><button type="button" class="icon" data-rm-new="${i}" aria-label="Retirer">✕</button></div>`);
-    $('#pieces', m).innerHTML = [...existantes, ...ajoutees].join('') || '<small class="muted">Aucun justificatif</small>';
+      <div class="piece"><span class="pdf">${esc(file.name.slice(0, 16))}</span><button type="button" class="icon" data-rm-new="${i}" aria-label="Retirer">✕</button></div>`);
+    $('#pieces', m).innerHTML = [...existantes, ...ajoutees].join('');
     $$('[data-rm-old]', m).forEach((b) => { b.onclick = () => { retirees.add(b.dataset.rmOld); dessinerPieces(); }; });
     $$('[data-rm-new]', m).forEach((b) => { b.onclick = () => { nouvelles.splice(Number(b.dataset.rmNew), 1); dessinerPieces(); }; });
   }
@@ -148,15 +138,16 @@ async function formulaire(tab, s = null) {
 
   if (estStock && !s) {
     const majProduits = () => {
-      const type = f.categorie.value === 'stock_cabine' ? 'cabine' : 'vente';
+      const type = f.elements.categorie.value === 'stock_cabine' ? 'cabine' : 'vente';
       f.stock_produit.innerHTML = '<option value="">— Aucun —</option>'
         + produits.filter((p) => p.type === type).map((p) => `<option value="${p.id}">${esc(p.nom)}</option>`).join('');
     };
-    f.categorie.onchange = majProduits;
+    $$('input[name=categorie]', f).forEach((r) => { r.onchange = majProduits; });
     majProduits();
   }
 
-  $('#annuler', m).onclick = closeModal;
+  if (s) $('#supprimer', m).onclick = () => supprimer(s);
+
   f.onsubmit = async (ev) => {
     ev.preventDefault();
     const bouton = f.querySelector('[type=submit]');
@@ -165,9 +156,9 @@ async function formulaire(tab, s = null) {
       date: f.date.value,
       libelle: f.libelle.value.trim(),
       montant: Number(f.montant.value),
-      categorie: estStock ? f.categorie.value : categorie,
-      statut: peutEtrePrevu && !f.paye.checked ? 'prevu' : 'paye',
-      moyen: f.moyen.value || null,
+      categorie: estStock ? f.elements.categorie.value : categorie,
+      statut: 'paye',
+      moyen: f.elements.moyen.value || null,
       note: f.note.value.trim() || null,
     };
     try {
@@ -187,7 +178,7 @@ async function formulaire(tab, s = null) {
         await q(db.rpc('ajuster_stock', { p_id: f.stock_produit.value, p_delta: Number(f.stock_qte.value) || 0 }));
       }
       closeModal();
-      toast('Sortie enregistrée');
+      toast('Enregistré');
       refresh();
     } catch (err) {
       toast(messageErreur(err), true);
@@ -219,53 +210,51 @@ async function gererModeles(editId = null) {
   const annee = new Date().getFullYear();
 
   const m = openModal('Charges fixes récurrentes', `
-    <p class="muted">Créez un modèle (électricité, loyer…) et choisissez la période : toutes les lignes « prévues » sont préparées. Le moment venu, il suffit de les valider avec le vrai montant et la facture.</p>
-    <div class="list">
-      ${modeles.map((x) => `
-        <div class="item">
-          <div class="item-main">
-            <strong>${esc(x.libelle)}</strong>
-            <small>${chf(x.montant)} · ${FREQUENCES[x.frequence]} · ${fmtDate(x.date_debut)} → ${fmtDate(x.date_fin)}</small>
-          </div>
-          <div class="item-actions">
-            <button class="btn small" data-m-edit="${x.id}">Modifier</button>
-            <button class="btn small danger-o" data-m-del="${x.id}">Supprimer</button>
-          </div>
-        </div>`).join('') || '<p class="empty">Aucun modèle.</p>'}
-    </div>
+    <p class="hint">Créez un modèle (loyer, électricité…) avec sa période : les lignes « à valider » sont préparées. Le moment venu, il suffit de les valider avec le vrai montant et la facture.</p>
+    ${modeles.length ? `<div class="card">${modeles.map((x) => `
+      <button class="row" data-m-edit="${x.id}">
+        <span class="row-main">
+          <span class="row-title">${esc(x.libelle)}</span>
+          <span class="row-sub">${FREQUENCES[x.frequence]} · ${fmtDate(x.date_debut)} → ${fmtDate(x.date_fin)}</span>
+        </span>
+        <span class="row-end"><span class="amount">${chf(x.montant)}</span></span>
+      </button>`).join('')}</div>` : ''}
     <h3>${e ? 'Modifier le modèle' : 'Nouveau modèle'}</h3>
     <form id="fm" class="form">
-      <label>Libellé<input name="libelle" required value="${esc(e?.libelle)}" placeholder="Ex. Électricité"></label>
-      <label>Montant estimé (CHF)<input type="number" name="montant" required min="0" step="0.05" inputmode="decimal" value="${e ? Number(e.montant).toFixed(2) : ''}"></label>
-      <label>Fréquence
-        <select name="frequence">${Object.entries(FREQUENCES).map(([k, l]) => `<option value="${k}" ${e?.frequence === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
-      </label>
-      <label>Du (première échéance)<input type="date" name="date_debut" required value="${e?.date_debut || `${annee}-01-01`}"></label>
-      <label>Au<input type="date" name="date_fin" required value="${e?.date_fin || `${annee}-12-31`}"></label>
-      <div class="actions">
-        ${e ? '<button type="button" class="btn" id="nouveau">Annuler la modification</button>' : ''}
-        <button type="submit" class="btn primary">${e ? 'Enregistrer' : 'Créer et préparer les lignes'}</button>
+      <label class="field"><span>Libellé</span><input name="libelle" required value="${esc(e?.libelle)}" placeholder="Ex. Électricité"></label>
+      <div class="field-row">
+        <label class="field"><span>Montant estimé (CHF)</span><input type="number" name="montant" required min="0" step="0.05" inputmode="decimal" value="${e ? Number(e.montant).toFixed(2) : ''}"></label>
+        <label class="field"><span>Fréquence</span>
+          <select name="frequence">${Object.entries(FREQUENCES).map(([k, l]) => `<option value="${k}" ${e?.frequence === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        </label>
       </div>
+      <div class="field-row">
+        <label class="field"><span>Première échéance</span><input type="date" name="date_debut" required value="${e?.date_debut || `${annee}-01-01`}"></label>
+        <label class="field"><span>Jusqu’au</span><input type="date" name="date_fin" required value="${e?.date_fin || `${annee}-12-31`}"></label>
+      </div>
+      <div class="form-foot">
+        ${e ? '<button type="button" class="link danger" id="m-del">Supprimer ce modèle</button>' : '<span></span>'}
+        <button type="submit" class="btn primary">${e ? 'Enregistrer' : 'Créer'}</button>
+      </div>
+      ${e ? '<button type="button" class="link" id="nouveau" style="justify-self:center">Annuler la modification</button>' : ''}
     </form>`);
 
   $$('[data-m-edit]', m).forEach((b) => { b.onclick = () => gererModeles(b.dataset.mEdit); });
   if (e) $('#nouveau', m).onclick = () => gererModeles();
 
-  $$('[data-m-del]', m).forEach((b) => {
-    b.onclick = async () => {
-      const x = modeles.find((mm) => mm.id === b.dataset.mDel);
-      closeModal();
-      if (!await confirmer(`Supprimer le modèle « ${x.libelle} » et ses lignes encore « prévues » ? Les lignes déjà payées sont conservées.`)) return;
+  if (e) {
+    $('#m-del', m).onclick = async () => {
+      if (!await confirmer(`Supprimer le modèle « ${e.libelle} » et ses lignes encore à valider ? Les lignes déjà payées sont conservées.`)) return;
       try {
-        await q(db.from('sorties').delete().eq('modele_id', x.id).eq('statut', 'prevu'));
-        await q(db.from('charges_fixes').delete().eq('id', x.id));
+        await q(db.from('sorties').delete().eq('modele_id', e.id).eq('statut', 'prevu'));
+        await q(db.from('charges_fixes').delete().eq('id', e.id));
         toast('Modèle supprimé');
         refresh();
       } catch (err) {
         toast(messageErreur(err), true);
       }
     };
-  });
+  }
 
   const f = $('#fm', m);
   f.onsubmit = async (ev) => {
@@ -295,7 +284,7 @@ async function gererModeles(editId = null) {
       }));
       if (lignes.length) await q(db.from('sorties').upsert(lignes, { onConflict: 'modele_id,date', ignoreDuplicates: true }));
       closeModal();
-      toast(`${lignes.length} ligne(s) prévue(s) dans la période`);
+      toast(`${lignes.length} ligne(s) dans la période`);
       refresh();
     } catch (err) {
       toast(messageErreur(err), true);

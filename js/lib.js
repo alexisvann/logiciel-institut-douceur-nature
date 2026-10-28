@@ -26,6 +26,7 @@ export const todayISO = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 export const fmtDate = (iso) => (iso ? iso.split('-').reverse().join('.') : '');
+export const fmtCourt = (iso) => (iso ? iso.slice(5).split('-').reverse().join('.') : '');
 export const currentMonth = () => todayISO().slice(0, 7);
 export const monthRange = (ym) => {
   const [y, m] = ym.split('-').map(Number);
@@ -36,7 +37,12 @@ export const monthLabel = (ym) => {
   const s = new Date(y, m - 1, 1).toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' });
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
-export const shiftMonth = (ym, delta) => {
+export const monthName = (ym) => {
+  const [y, m] = ym.split('-').map(Number);
+  const s = new Date(y, m - 1, 1).toLocaleDateString('fr-CH', { month: 'long' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+export const shiftMonth =(ym, delta) => {
   const [y, m] = ym.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
@@ -56,9 +62,15 @@ export const refresh = () => window.dispatchEvent(new Event('refresh'));
 
 export const monthBarHtml = () => `
   <div class="monthbar no-print">
-    <button class="btn" data-mois="-1" aria-label="Mois précédent">‹</button>
+    <button class="nav-btn" data-mois="-1" aria-label="Mois précédent">‹</button>
     <strong>${esc(monthLabel(state.mois))}</strong>
-    <button class="btn" data-mois="1" aria-label="Mois suivant">›</button>
+    <button class="nav-btn" data-mois="1" aria-label="Mois suivant">›</button>
+  </div>`;
+
+// Choix unique présenté en pastilles ; une pastille avec la valeur '' = « aucun »
+export const chips = (name, options, valeur = '') => `
+  <div class="chips">${options.map(([k, l]) => `
+    <label class="chip"><input type="radio" name="${name}" value="${esc(k)}" ${k === valeur ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}
   </div>`;
 
 export function bindMonthBar(root) {
@@ -99,7 +111,9 @@ export function openModal(title, bodyHtml) {
   m.innerHTML = `
     <form method="dialog" class="modal-head"><h2>${esc(title)}</h2><button class="icon" aria-label="Fermer">✕</button></form>
     <div class="modal-body">${bodyHtml}</div>`;
-  m.showModal();
+  // si une fenêtre est déjà ouverte (ex. confirmation de suppression), on remplace son contenu
+  if (!m.open) m.showModal();
+  document.activeElement?.blur();
   return m;
 }
 export const closeModal = () => $('#modal').close();

@@ -4,10 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Gestion de l’institut</title>
-  <meta name="theme-color" content="#b07a8a">
+  <meta name="theme-color" content="#f6f4f2">
   <meta name="robots" content="noindex, nofollow">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -20,7 +23,7 @@
       <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>
       <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
       <p id="login-erreur" class="form-error" hidden></p>
-      <button class="btn primary" type="submit">Se connecter</button>
+      <button class="btn primary block" type="submit">Se connecter</button>
     </form>
   </section>
 
@@ -28,12 +31,18 @@
     <header class="topbar no-print">
       <div class="brand" id="brand"></div>
       <nav id="nav" class="nav">
-        <a href="#/tableau-de-bord" data-page="tableau-de-bord"><span class="ico">▦</span><span>Tableau de bord</span></a>
-        <a href="#/entrees" data-page="entrees"><span class="ico">＋</span><span>Entrées</span></a>
-        <a href="#/sorties" data-page="sorties"><span class="ico">－</span><span>Sorties</span></a>
-        <a href="#/stock" data-page="stock"><span class="ico">☰</span><span>Stock</span></a>
+        <a href="#/tableau-de-bord" data-page="tableau-de-bord">
+          <svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/></svg><span>Récap</span></a>
+        <a href="#/entrees" data-page="entrees">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg><span>Entrées</span></a>
+        <a href="#/sorties" data-page="sorties">
+          <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 21h16"/></svg><span>Sorties</span></a>
+        <a href="#/stock" data-page="stock">
+          <svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/></svg><span>Stock</span></a>
       </nav>
-      <button class="btn small" id="logout">Déconnexion</button>
+      <button class="icon logout" id="logout" aria-label="Se déconnecter" title="Se déconnecter">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
     </header>
     <main id="main"></main>
   </div>

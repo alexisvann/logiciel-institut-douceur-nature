@@ -1,5 +1,5 @@
 import {
-  db, $, $$, esc, chf, fmtDate, todayISO, monthRange, state, monthBarHtml, bindMonthBar,
+  db, $, $$, esc, chf, fmtDate, fmtCourt, todayISO, monthRange, state, monthBarHtml, bindMonthBar, chips,
   MOYENS, libelleEntree, q, openModal, closeModal, confirmer, toast, messageErreur, refresh,
 } from './lib.js';
 
@@ -27,43 +27,39 @@ export async function render(root, sub) {
   }
 
   root.innerHTML = `
-    <div class="page-head"><h1>Entrées</h1><button class="btn primary" id="add">+ Ajouter</button></div>
-    <div class="tabs">${TABS.map(([k, l]) => `<a href="#/entrees/${k}" class="${k === sub ? 'active' : ''}">${l}</a>`).join('')}</div>
-    ${isBons
-      ? `<p class="muted">Vendre un bon est une entrée d’argent. Quand le bon sert à payer, choisissez « Bon cadeau » comme moyen de paiement : le solde baisse automatiquement.</p>`
-      : monthBarHtml()}
-    <div class="list">${rows.length ? rows.map((r) => ligne(r, soldes)).join('') : '<p class="empty">Rien pour le moment.</p>'}</div>`;
+    <div class="page-head"><h1>Entrées</h1><button class="btn primary small" id="add">+ Ajouter</button></div>
+    <div class="seg tabs">${TABS.map(([k, l]) => `<a href="#/entrees/${k}" class="${k === sub ? 'active' : ''}">${l}</a>`).join('')}</div>
+    ${isBons ? '' : monthBarHtml()}
+    <div class="card" style="margin-top:.8rem">${rows.length ? rows.map((r) => ligne(r, soldes)).join('') : '<p class="empty">Rien pour le moment.</p>'}</div>
+    ${isBons ? '<p class="hint" style="margin-top:.8rem">Quand un bon sert à payer, choisissez « Bon cadeau » comme moyen de paiement : le solde baisse tout seul.</p>' : ''}`;
 
   bindMonthBar(root);
   $('#add').onclick = () => formulaire(sub);
   $$('[data-edit]', root).forEach((b) => { b.onclick = () => formulaire(sub, rows.find((r) => r.id === b.dataset.edit)); });
-  $$('[data-del]', root).forEach((b) => { b.onclick = () => supprimer(rows.find((r) => r.id === b.dataset.del)); });
 }
 
 function ligne(r, soldes) {
-  const paye = r.paye_le
-    ? `<span class="badge ok">Payé le ${fmtDate(r.paye_le)}</span>`
-    : '<span class="badge warn">En attente</span>';
-  let bon = '';
-  if (r.type === 'bon_cadeau') {
-    const s = soldes[r.id] ?? 0;
-    bon = s > 0 ? `<span class="badge info">Solde ${chf(s)}</span>` : '<span class="badge">Épuisé</span>';
-  }
-  const meta = [fmtDate(r.date_service), r.moyen ? MOYENS[r.moyen] : '', r.type === 'produit' && r.quantite ? `×${r.quantite}` : '']
-    .filter(Boolean).map(esc).join(' · ');
+  const bon = r.type === 'bon_cadeau';
+  const solde = soldes[r.id] ?? 0;
+  const sub = bon
+    ? [`Vendu le ${fmtDate(r.date_service)}`, r.moyen ? MOYENS[r.moyen] : '']
+    : [
+      fmtCourt(r.date_service),
+      r.moyen ? MOYENS[r.moyen] : '',
+      r.type === 'produit' && r.quantite > 1 ? `×${r.quantite}` : '',
+      r.paye_le && r.paye_le !== r.date_service ? `payé le ${fmtCourt(r.paye_le)}` : '',
+    ];
+  const fin = bon
+    ? `<span class="amount">${chf(solde)}</span><span class="tag">${solde > 0 ? `sur ${chf(r.montant)}` : 'Épuisé'}</span>`
+    : `<span class="amount">${chf(r.montant)}</span>${r.paye_le ? '' : '<span class="tag warn">En attente</span>'}`;
   return `
-    <div class="item">
-      <div class="item-main">
-        <strong>${esc(libelleEntree(r))}</strong>
-        <small>${meta}</small>
-        <div class="badges">${paye}${bon}</div>
-      </div>
-      <div class="item-amount">${chf(r.montant)}</div>
-      <div class="item-actions">
-        <button class="btn small" data-edit="${r.id}">Modifier</button>
-        <button class="btn small danger-o" data-del="${r.id}">Supprimer</button>
-      </div>
-    </div>`;
+    <button class="row ${bon && solde <= 0 ? 'faded' : ''}" data-edit="${r.id}">
+      <span class="row-main">
+        <span class="row-title">${esc(libelleEntree(r))}</span>
+        <span class="row-sub">${sub.filter(Boolean).map(esc).join(' · ')}</span>
+      </span>
+      <span class="row-end">${fin}</span>
+    </button>`;
 }
 
 async function supprimer(r) {
@@ -95,82 +91,87 @@ async function formulaire(type, e = null) {
     .filter((b) => b.dispo > 0);
 
   const estBon = type === 'bon_cadeau';
-  const titre = `${e ? 'Modifier' : 'Ajouter'} – ${{ service: 'service', produit: 'vente de produit', bon_cadeau: 'vente de bon cadeau' }[type]}`;
+  const titre = `${e ? 'Modifier' : 'Nouvelle'} ${{ service: 'prestation', produit: 'vente de produit', bon_cadeau: 'vente de bon cadeau' }[type]}`;
   const payeInitial = e ? !!e.paye_le : true;
+  const moyensListe = [['', 'Aucun'], ...Object.entries(MOYENS)];
 
   const m = openModal(titre, `
     <form id="f" class="form">
-      <label>Date du ${type === 'service' ? 'service' : 'jour'}
-        <input type="date" name="date_service" required value="${e?.date_service || todayISO()}">
-      </label>
-
       ${type === 'service' ? `
-        <label>Prestation
+        <label class="field"><span>Prestation</span>
           <input name="libelle" list="prestations" required autocomplete="off" value="${esc(e?.libelle)}" placeholder="Ex. Pose gel, soin du visage…">
           <datalist id="prestations">${[...prix.keys()].map((k) => `<option value="${esc(k)}"></option>`).join('')}</datalist>
         </label>` : ''}
 
       ${type === 'produit' ? `
-        <label>Produit
+        <label class="field"><span>Produit</span>
           <select name="produit_id">
             <option value="">Autre produit (hors stock)</option>
             ${produits.map((p) => `<option value="${p.id}" ${e?.produit_id === p.id ? 'selected' : ''}>${esc(p.nom)} (stock : ${p.quantite})</option>`).join('')}
           </select>
         </label>
-        <label id="row-libelle">Désignation<input name="libelle" autocomplete="off" value="${esc(e?.libelle)}"></label>
-        <label id="row-qte">Quantité<input type="number" name="quantite" min="1" step="1" value="${e?.quantite || 1}"></label>` : ''}
+        <label class="field" id="row-libelle"><span>Désignation</span><input name="libelle" autocomplete="off" value="${esc(e?.libelle)}"></label>
+        <label class="field" id="row-qte"><span>Quantité</span><input type="number" name="quantite" min="1" step="1" value="${e?.quantite || 1}"></label>` : ''}
 
       ${estBon ? `
-        <label>Bon pour<input name="libelle" required autocomplete="off" value="${esc(e?.libelle)}" placeholder="Ex. Marie Dupont"></label>` : ''}
+        <label class="field"><span>Bon pour</span><input name="libelle" required autocomplete="off" value="${esc(e?.libelle)}" placeholder="Ex. Marie Dupont"></label>` : ''}
 
-      <label>Montant (CHF)
-        <input type="number" name="montant" required min="0.05" step="0.05" inputmode="decimal" value="${e ? Number(e.montant).toFixed(2) : ''}">
+      <div class="field-row">
+        <label class="field"><span>Montant (CHF)</span>
+          <input type="number" name="montant" required min="0.05" step="0.05" inputmode="decimal" value="${e ? Number(e.montant).toFixed(2) : ''}">
+        </label>
+        <label class="field"><span>Date</span><input type="date" name="date_service" required value="${e?.date_service || todayISO()}"></label>
+      </div>
+
+      ${estBon ? '' : `
+        <div class="seg" style="justify-self:start">
+          <label><input type="radio" name="statut" value="paye" ${payeInitial ? 'checked' : ''}><span>Payé</span></label>
+          <label><input type="radio" name="statut" value="attente" ${payeInitial ? '' : 'checked'}><span>En attente</span></label>
+        </div>`}
+
+      <label class="field" id="row-paye-le"><span>Payé le</span><input type="date" name="paye_le" value="${e?.paye_le || (payeInitial ? todayISO() : '')}"></label>
+
+      <div class="field"><span id="moyen-label">Moyen de paiement</span>${chips('moyen', moyensListe, e?.moyen || '')}</div>
+
+      <label class="field" id="row-bon"><span>Bon utilisé</span>
+        <select name="bon_id">
+          ${bonsDispo.map((b) => `<option value="${b.id}" ${e?.bon_id === b.id ? 'selected' : ''}>${esc(b.libelle)} – solde ${chf(b.dispo)}</option>`).join('')}
+        </select>
       </label>
 
-      <fieldset>
-        <legend>Paiement</legend>
-        <label class="check">
-          <input type="checkbox" name="paye" ${payeInitial || estBon ? 'checked' : ''} ${estBon ? 'disabled' : ''}>
-          Payé ${estBon ? '(la vente d’un bon est payée tout de suite)' : ''}
-        </label>
-        <label id="row-paye-le">Payé le<input type="date" name="paye_le" value="${e?.paye_le || (payeInitial ? todayISO() : '')}"></label>
-        <label>Moyen de paiement<select name="moyen"></select></label>
-        <label id="row-bon">Bon cadeau utilisé
-          <select name="bon_id">
-            ${bonsDispo.map((b) => `<option value="${b.id}" ${e?.bon_id === b.id ? 'selected' : ''}>${esc(b.libelle)} – solde ${chf(b.dispo)}</option>`).join('')}
-          </select>
-        </label>
-      </fieldset>
+      <details class="more" ${e?.note ? 'open' : ''}>
+        <summary>Remarque</summary>
+        <label class="field"><textarea name="note" rows="2">${esc(e?.note)}</textarea></label>
+      </details>
 
-      <label>Remarque (facultatif)<textarea name="note" rows="2">${esc(e?.note)}</textarea></label>
-
-      <div class="actions">
-        <button type="button" class="btn" id="annuler">Annuler</button>
+      <div class="form-foot">
+        ${e ? '<button type="button" class="link danger" id="supprimer">Supprimer</button>' : '<span></span>'}
         <button type="submit" class="btn primary">Enregistrer</button>
       </div>
     </form>`);
 
   const f = $('#f', m);
-  const moyenSel = f.moyen;
-  const estPaye = () => estBon || f.paye.checked;
+  const estPaye = () => estBon || f.elements.statut.value === 'paye';
+  const moyenVal = () => f.elements.moyen.value;
 
-  // Le moyen est obligatoire dès que « payé » ; « bon cadeau » n'existe que si payé tout de suite
-  function majPaiement(garder = moyenSel.value) {
+  // « Payé » => moyen obligatoire (vérifié à l'envoi) ; « bon cadeau » seulement si payé tout de suite
+  function majPaiement() {
     const paye = estPaye();
-    const options = Object.entries(MOYENS).filter(([k]) => k !== 'bon_cadeau' || (paye && !estBon && bonsDispo.length));
-    moyenSel.innerHTML = `<option value="">${paye ? '— Choisir —' : 'Pas encore défini'}</option>`
-      + options.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
-    moyenSel.value = options.some(([k]) => k === garder) ? garder : '';
-    moyenSel.required = paye;
+    $$('input[name=moyen]', f).forEach((r) => {
+      const cache = (r.value === '' && paye) || (r.value === 'bon_cadeau' && !(paye && !estBon && bonsDispo.length));
+      r.closest('.chip').hidden = cache;
+      if (cache && r.checked) r.checked = false;
+    });
+    $('#moyen-label', m).textContent = paye ? 'Moyen de paiement' : 'Moyen prévu (facultatif)';
     $('#row-paye-le', m).hidden = !paye;
     f.paye_le.required = paye;
     if (paye && !f.paye_le.value) f.paye_le.value = todayISO();
-    $('#row-bon', m).hidden = moyenSel.value !== 'bon_cadeau';
+    $('#row-bon', m).hidden = moyenVal() !== 'bon_cadeau';
   }
-  majPaiement(e?.moyen || '');
+  majPaiement();
 
-  f.paye.onchange = () => majPaiement();
-  moyenSel.onchange = () => majPaiement();
+  $$('input[name=statut]', f).forEach((r) => { r.onchange = majPaiement; });
+  $$('input[name=moyen]', f).forEach((r) => { r.onchange = majPaiement; });
 
   // « payé le » suit la date tant qu'on n'y a pas touché
   let payeLeModifie = !!e;
@@ -200,11 +201,12 @@ async function formulaire(type, e = null) {
     majProduit(true);
   }
 
-  $('#annuler', m).onclick = closeModal;
+  if (e) $('#supprimer', m).onclick = () => supprimer(e);
+
   f.onsubmit = async (ev) => {
     ev.preventDefault();
     const paye = estPaye();
-    const moyen = moyenSel.value || null;
+    const moyen = moyenVal() || null;
     if (paye && !moyen) return toast('Choisissez le moyen de paiement.', true);
     const produitId = type === 'produit' && f.produit_id.value ? f.produit_id.value : null;
     const payload = {
@@ -224,7 +226,7 @@ async function formulaire(type, e = null) {
     try {
       await q(e ? db.from('entrees').update(payload).eq('id', e.id) : db.from('entrees').insert(payload));
       closeModal();
-      toast('Entrée enregistrée');
+      toast('Enregistré');
       refresh();
     } catch (err) {
       toast(messageErreur(err), true);
